@@ -6,8 +6,6 @@ import functools
 from inplace_abn import InPlaceABN, InPlaceABNSync
 import math
 
-from networks.resnet import resnet18, resnet101
-
 #BatchNorm2d = functools.partial(InPlaceABN, activation='identity')
 BatchNorm2d = functools.partial(InPlaceABNSync, activation='identity')
 
@@ -135,29 +133,26 @@ class PSPModule(nn.Module):
         return bottle
 
 class ResNet(nn.Module):
-    def __init__(self, block, layers, num_classes, pretrained):
+    def __init__(self, block, layers, num_classes):
         self.inplanes = 128
         super(ResNet, self).__init__()
-        
-        if layers == [2, 2, 2, 2]:
-            resnet = resnet18(pretrained=pretrained)
-        elif layers == [3, 4, 23, 3]:
-            resnet = resnet101(pretrained=pretrained)
+        self.conv1 = conv3x3(3, 64, stride=2)
+        self.bn1 = BatchNorm2d(64)
+        self.relu1 = nn.ReLU(inplace=False)
+        self.conv2 = conv3x3(64, 64)
+        self.bn2 = BatchNorm2d(64)
+        self.relu2 = nn.ReLU(inplace=False)
+        self.conv3 = conv3x3(64, 128)
+        self.bn3 = BatchNorm2d(128)
+        self.relu3 = nn.ReLU(inplace=False)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        self.layer0 = nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu, resnet.conv2, resnet.bn2, 
-                                    resnet.relu, resnet.conv3, resnet.bn3, resnet.relu, resnet.maxpool)
-        self.layer1, self.layer2, self.layer3, self.layer4 = resnet.layer1, resnet.layer2, resnet.layer3, resnet.layer4
-
-        for n, m in self.layer3.named_modules():
-            if 'conv2' in n:
-                m.dilation, m.padding, m.stride = (2, 2), (2, 2), (1, 1)
-            elif 'downsample.0' in n:
-                m.stride = (1, 1)
-        for n, m in self.layer4.named_modules():
-            if 'conv2' in n:
-                m.dilation, m.padding, m.stride = (4, 4), (4, 4), (1, 1)
-            elif 'downsample.0' in n:
-                m.stride = (1, 1)
+        self.relu = nn.ReLU(inplace=False)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, ceil_mode=True) # change
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilation=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilation=4, multi_grid=(1,1,1))
 
         if layers == [3, 4, 23, 3]:
             self.pspmodule = PSPModule(2048, 512)
@@ -209,7 +204,10 @@ class ResNet(nn.Module):
                 x_feat = feats
                 x_feat_after_psp = self.pspmodule(x_feat)
         else:
-            x = self.layer0(x)
+            x = self.relu1(self.bn1(self.conv1(x)))
+            x = self.relu2(self.bn2(self.conv2(x)))
+            x = self.relu3(self.bn3(self.conv3(x)))
+            x = self.maxpool(x)
             x = self.layer1(x)
             x = self.layer2(x)
             x = self.layer3(x)
@@ -221,10 +219,10 @@ class ResNet(nn.Module):
         x = self.head(x_feat_after_psp)
         return [x, x_dsn, x_feat, x_feat_after_psp]
 
-def Res_pspnet(block = Bottleneck, layers = [3, 4, 23, 3], num_classes=21, pretrained=True):
+def Res_pspnet(block = Bottleneck, layers = [3, 4, 23, 3], num_classes=21):
     '''
     ResNet(Bottleneck, [3, 4, 23, 3], num_classes) -> 101
     ResNet(BasicBlock, [2, 2, 2, 2], num_classes)  -> 18
     '''
-    model = ResNet(block, layers, num_classes, pretrained)
+    model = ResNet(block, layers, num_classes)
     return model

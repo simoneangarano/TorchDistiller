@@ -12,7 +12,7 @@ if __name__ == '__main__':
     args = ValOptions().initialize()
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     valloader = data.DataLoader(CSTrainValSet(args.data_dir, args.data_list, crop_size=(1024, 2048), scale=False, mirror=False), 
-                                batch_size=1, shuffle=False, pin_memory=True)
+                                batch_size=1, shuffle=False, pin_memory=True, num_workers=24)
     student = Res_pspnet(BasicBlock, [2, 2, 2, 2], num_classes = args.num_classes)
     student.load_state_dict(torch.load(args.restore_from))
     mean_IU, IU_array = evaluate_main(student, valloader, '512,512', args.num_classes, True, 1, 'val')

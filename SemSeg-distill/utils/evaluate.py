@@ -8,6 +8,7 @@ from torch.utils import data
 from math import ceil
 from PIL import Image as PILImage
 import torch.nn as nn
+from alive_progress import alive_it
 
 def id2trainId(label, id_to_trainid, reverse=False):
         label_copy = label.copy()
@@ -136,7 +137,7 @@ def get_confusion_matrix(gt_label, pred_label, class_num):
 
         return confusion_matrix
 
-def evaluate_main(model, loader, input_size, num_classes, whole = False, recurrence = 1, type = 'val'):
+def evaluate_main(model, loader, input_size, num_classes, whole=False, recurrence=1, split='val', save_out=False):
     """Create the model and start the evaluation process."""
 
     h, w = map(int, input_size.split(','))
@@ -153,21 +154,20 @@ def evaluate_main(model, loader, input_size, num_classes, whole = False, recurre
                     18: ignore_label, 19: 6, 20: 7, 21: 8, 22: 9, 23: 10, 24: 11, 25: 12, 26: 13, 27: 14,
                     28: 15, 29: ignore_label, 30: ignore_label, 31: 16, 32: 17, 33: 18}
 
-    model.eval()
     model.cuda()
+    model.eval()
 
     confusion_matrix = np.zeros((num_classes,num_classes))
-    palette = get_palette(256)
+    
+    if save_out:
+        palette = get_palette(256)
+        if not os.path.exists('outputs'):
+            os.makedirs('outputs')
 
-    if not os.path.exists('outputs'):
-        os.makedirs('outputs')
-
-    for index, batch in enumerate(loader):
-        if index % 100 == 0:
-            print('%d processd'%(index))
-        if type == 'val':
+    for index, batch in alive_it(enumerate(loader), total=len(loader)):
+        if split == 'val':
             image, label, size, name = batch
-        elif type == 'test':
+        elif split == 'test':
             image, size, name = batch
         size = size[0].numpy()
         with torch.no_grad():
@@ -177,20 +177,21 @@ def evaluate_main(model, loader, input_size, num_classes, whole = False, recurre
                 output = predict_sliding(model, image.numpy(), input_size, num_classes, False, recurrence)
 
         seg_pred = np.asarray(np.argmax(output, axis=2), dtype=np.uint8)
-        if type == 'test': seg_pred = id2trainId(seg_pred, id_to_trainid, reverse=True)
+        if split == 'test': seg_pred = id2trainId(seg_pred, id_to_trainid, reverse=True)
 
-        output_im = PILImage.fromarray(seg_pred)
-        output_im.putpalette(palette)
-        output_im.save('outputs/'+name[0]+'.png')
+        if save_out:
+            output_im = PILImage.fromarray(seg_pred)
+            output_im.putpalette(palette)
+            output_im.save('outputs/'+name[0]+'.png')
 
-        if type == 'val':
+        if split == 'val':
             seg_gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
             ignore_index = seg_gt != 255
             seg_gt = seg_gt[ignore_index]
             seg_pred = seg_pred[ignore_index]
             confusion_matrix += get_confusion_matrix(seg_gt, seg_pred, num_classes)
 
-    if type == 'val':
+    if split == 'val':
         pos = confusion_matrix.sum(1)
         res = confusion_matrix.sum(0)
         tp = np.diag(confusion_matrix)

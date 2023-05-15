@@ -1,0 +1,16 @@
+data_dir : ../../CIRKD/data/Cityscapes
+data_list : ./dataset/list/cityscapes/val.lst
+gpu : 0
+num_classes : 19
+restore_from : ckpt/False_False_False_channel_kl_3_4_v2/city_39999_G.pth
+500 images are loaded!
+0 processd
+100 processd
+200 processd
+300 processd
+400 processd
+mean_IU: 0.729420  IU_array: 
+[0.97752033 0.82835399 0.91558544 0.40038967 0.56175459 0.62415016
+ 0.67863705 0.77138945 0.92022122 0.64190109 0.94286429 0.80922728
+ 0.58974357 0.93757639 0.60386384 0.80023336 0.55322916 0.54073117
+ 0.76160876]
